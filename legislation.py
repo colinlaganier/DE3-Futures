@@ -1,8 +1,8 @@
-from misc import Queue
+from misc import SimpleQueue
 
 class Legislation:
 
-    queue = Queue()
+    queue = SimpleQueue()
     count = 0
 
     def __init__(self, name, authors, contents):
@@ -15,13 +15,16 @@ class Legislation:
 
         self.registered_voters = []
 
+    @classmethod
+    def change_output(cls, output):
+        cls.queue = output
+
     def register(voter):
         self.registered_voters.append(voter)
 
     def notify(self):
         """ Notify voters to submit their vote """
         for voter in self.registered_voters:
-            #def notify(self, legislation, for_legislation, comments, level, final_call=0):
             voter.notify(self, None, None, None, final_call=1)
     
     def put_to_public(self):

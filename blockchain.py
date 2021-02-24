@@ -23,12 +23,12 @@ class BlockChain:
 
 class BlockChainFactory:
 
-    def __init__(self):
+    def __init__(self, voter_input, legislation_input):
         self.blockchain = BlockChain()
         self.proof_of_work = ProofOfWork(self.blockchain)
 
-        commons_source = LegislationSource()
-        vote_source = VoteSource()
+        commons_source = LegislationSource(legislation_input)
+        vote_source = VoteSource(voter_input)
 
         self.proof_of_work.register_source(commons_source)
         self.proof_of_work.register_source(vote_source)

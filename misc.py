@@ -1,4 +1,7 @@
-class Queue:
+from multiprocessing import Queue
+
+
+class SimpleQueue:
 
     def __init__(self):
         self._queue = []
@@ -20,3 +23,10 @@ class Queue:
     def is_empty(self):
         return bool(self._queue)
  
+ class MPQueueWrapper(Queue):
+     
+    def push(self, data, *args, **kwargs):
+        self.put(data, *args, **kwargs)
+
+    def pop(self, *args, **kwargs):
+        return self.get(*args, **kwargs)

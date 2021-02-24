@@ -1,7 +1,7 @@
 import abc
 from random import randint
 
-from misc import Queue
+from misc import SimpleQueue
 
 from legislation import Legislation
 
@@ -41,7 +41,7 @@ class FakeEncrypter(Encrypter):
 
 class Vote:
 
-    vote_queue = Queue()
+    vote_queue = SimpleQueue()
 
     def __init__(self, legislation, vote_for, voter, comments):
         if isinstance(legislation, Legislation):
@@ -59,6 +59,10 @@ class Vote:
         else:
             raise TypeError("Invalid Voter")
         self.comments = comments
+
+    @classmethod
+    def change_output(cls, output):
+        cls.queue = output
 
     def cast(self, key, encrypter=FakeEncrypter):
         # ------------------------------------------------------------------
