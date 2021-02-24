@@ -16,11 +16,14 @@ class Legislation:
         self.registered_voters = []
 
     @classmethod
-    def change_output(cls, output):
+    def set_output(cls, output):
         cls.queue = output
 
     def register(voter):
         self.registered_voters.append(voter)
+
+    def deregister(voter):
+        self.registered_voters.remove(voter)
 
     def notify(self):
         """ Notify voters to submit their vote """

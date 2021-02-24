@@ -1,7 +1,7 @@
 import abc
 from random import randint
 
-from misc import SimpleQueue
+from misc import SimpleQueue, MLPipelineFake
 
 from legislation import Legislation
 
@@ -19,29 +19,28 @@ class Encrypter(abc.ABC):
     def decrypt(self, key):
         raise NotImplementedError()
 
-    def encrypt(self, vote, key):
-        if self.validate(vote, key):
-            data = self._get_cipher_text(vote, key)
-            return EncryptedVote(data)
-        raise ValueError()
+    def encrypt(self, data, key):
+        cipher_text = self._get_cipher_text(data, key)
+        return EncryptedVote(cipher_text)
 
     @abc.abstractmethod
-    def _get_cipher_text(self, vote, key):
+    def _get_cipher_text(self, data, key):
         raise NotImplementedError()
 
 
 class FakeEncrypter(Encrypter):
 
-    def decrypt(self, vote, key):
-        return "CANT DO THIS RIGHT NOW"
+    def decrypt(self, data, key):
+        return str(data)
 
-    def _get_cipher_text(self, vote, key):
-        return "ENCRYPTED VOTE: " + str(vote)
+    def _get_cipher_text(self, data, key):
+        return "ENCRYPTED VOTE: " + str(data)
 
 
 class Vote:
 
     vote_queue = SimpleQueue()
+    ml_pipeline = MLPipelineFake()
 
     def __init__(self, legislation, vote_for, voter, comments):
         if isinstance(legislation, Legislation):
@@ -61,16 +60,22 @@ class Vote:
         self.comments = comments
 
     @classmethod
-    def change_output(cls, output):
+    def set_output(cls, output):
         cls.queue = output
 
     def cast(self, key, encrypter=FakeEncrypter):
-        # ------------------------------------------------------------------
-        #   Needs some work doing. Pipe comments to ML system
         # ------------------------------------------------------------------ #
+        #   Needs some work doing. Pipe comments to ML system                #
+        # ------------------------------------------------------------------ #
+
+        encoded_comments = Vote.ml_pipeline.encode(self.comments)
         encrypter = Encrypter(randint(0, 2**32))
-        encrytped_vote = encrypter.encrypt(self, key)
-        Vote.vote_queue
+
+        plain_text = f"{Legislation.id}{self.vote_for}{encoded_comments}"
+        cipher_text = f"{str(self.voter)}{self.comments}"
+        cipher_text = encrypter.encrypt(cipher_text, key)
+        encrypted_vote = EncryptedVote(cipher_text, plain_text)
+        Vote.vote_queue.push(encrypted_vote)
 
 
     
@@ -78,19 +83,20 @@ class Vote:
         return hash(str(self))
 
     def __str__(self):
-        return " ".join([str(x) for x in (self.legislation, self.vote_for, self.voter)])
+        return " ".join([str(x) for x in (self.legislation, self.vote_for, self.voter, self.comments)])
 
 
 class EncryptedVote:
 
-    def __init__(self, data):
-        self._data
+    def __init__(self, cipher_text, plain_text):
+        self.cipher_text = cipher_text
+        self.plain_text = plain_text
 
     def __str__(self):
-        return str(data)
+        return f"CIPHER TEXT: {self.cipher_text}\nPLAIN TEXT: {self.plain_text}"
     
     def __hash__(self):
-        return hash(self.data)
+        return hash(str(self))
 
 
 class Voter:
@@ -108,6 +114,7 @@ class Voter:
         self.notify_all_subs(legislation, for_legislation, comments)
         vote = Vote(legislation, for_legislation, self, comments)
         vote.cast(self.public_key)
+        legislation.deregister(self)
 
     def notify_all_subs(self, legislation, for_legislation, comments, level=0):
         legislative_list = [type(legislation)]
@@ -151,6 +158,8 @@ class Voter:
             self.notifications[legislation.id] = (level, Vote(legislation, for_legislation, self, comments))
             legislation.register(self.proxy)
 
+    def __str__(self):
+        return self.id
 
 class VoterProxy:
 

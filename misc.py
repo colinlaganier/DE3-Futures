@@ -30,3 +30,11 @@ class SimpleQueue:
 
     def pop(self, *args, **kwargs):
         return self.get(*args, **kwargs)
+
+class MLPipelineFake:
+
+    def __init__(self):
+        pass
+
+    def encode(self, comments):
+        return " ".join(["ENCODED COMMENTS", comments, "ENCODED COMMENTS"])
