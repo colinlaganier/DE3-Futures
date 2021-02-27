@@ -7,7 +7,7 @@ class BlockChain:
     def __init__(self, max_nonce=2**32):
         self.genesis = Block("", "Genesis", 0, 0)
         self.tail = self.genesis
-        self.moderator = Moderator()
+        self.moderator = Moderator(time_per_block=300)
 
         self.max_nonce = max_nonce
 

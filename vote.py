@@ -143,6 +143,11 @@ class Voter:
         except KeyError:
             self.subscribed_by_me[legislation_type.__name__] = [voter]
 
+    def deregister(voter, legislation_type):
+        try:
+            self.subscribed_to_me[legislation_type.__name__].remove(voter)
+        except KeyError:
+            return
 
     def notify(self, legislation, for_legislation, comments, level, final_call=0):
         if final_call:
@@ -160,6 +165,7 @@ class Voter:
 
     def __str__(self):
         return self.id
+
 
 class VoterProxy:
 

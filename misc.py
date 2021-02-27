@@ -31,6 +31,7 @@ class SimpleQueue:
     def pop(self, *args, **kwargs):
         return self.get(*args, **kwargs)
 
+
 class MLPipelineFake:
 
     def __init__(self):
@@ -38,3 +39,22 @@ class MLPipelineFake:
 
     def encode(self, comments):
         return " ".join(["ENCODED COMMENTS", comments, "ENCODED COMMENTS"])
+
+class MLQueueWrapper(Queue):
+
+    def push(self, value):
+        self.put(value)
+
+    def pop(self):
+        return self.get()
+
+class TaxToken:
+
+    count = 0
+
+    def __init__(self):
+        self.id = TaxToken.count
+        TaxToken.count += 1
+
+    def __hash__(self):
+        return hash(str(self.id))

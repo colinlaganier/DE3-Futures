@@ -4,6 +4,7 @@ from functools import reduce
 
 from vote import Vote
 from legislation import Legislation
+from misc import TaxToken, MLQueueWrapper
 
 # TOD
 #   > Automatically updating hash on change
@@ -13,7 +14,7 @@ from legislation import Legislation
 
 class Moderator:
 
-    def __init__(self, time_per_block=300, blocks_per_chunk=1024):
+    def __init__(self, time_per_block=1.21E6, blocks_per_chunk=1024):
         self.block_store = []
         self._difficulty
         self._time_per_block = time_per_block
@@ -41,6 +42,7 @@ class Moderator:
         else:
             self._difficulty -= 1
 
+
 class ProofOfWork:
 
     def __init__(self, blockchain):
@@ -51,7 +53,10 @@ class ProofOfWork:
         self.moderator = blockchain.moderator
         self.register(self.moderator)
 
+        self.validation_queue = MLQueueWrapper()
+
         self.subscribed = []
+        self.miners = []
 
     @property
     def unvalidated_block(self):
@@ -61,12 +66,28 @@ class ProofOfWork:
     def unvalidated_block(self, value):
         raise PermissionError("Can't change value of next block")
 
-    def validate_block(self, nonse):
+    @property
+    def max_nonce(self):
+        return self.blockchain.max_nonce
+
+    def listen(self):
+        while True:
+            if not self.validation_queue.empty():
+                item = self.validation_queue.pop()
+                if item is None:
+                    break
+                else:
+                    self.validate_block(*item)
+    
+    def validate_block(self, nonse, miner):
         block = self.get_block_from_unvalidated_block(nonse)
 
         if int(block.hash, 16) < 2**(256-self.moderator.difficulty):
             self.blockchain.add(block)
             self.notify_all(block)
+            miner.receive_token(TaxToken())
+            self._next_block = self._blockfactory.next_block()
+            self.notify_all_miners()
             return True
 
         return False
@@ -82,6 +103,10 @@ class ProofOfWork:
     def notify_all(self, block):
         for sub in self.subscribed:
             sub.notify(block)
+
+    def send_new_block(self): 
+        for miner, queue in self.miners:
+            queue.push(self._next_block)
         
     def register(self, object):
         has_notify = getattr(object, "notify", None)
@@ -94,9 +119,21 @@ class ProofOfWork:
         if object in self.subscribed:
             self.subscribed.remove(object)
 
+    def notify_all_miners(self):
+        for miner, queue in self.miners:
+            queue.push(self._next_block)
+
+    def register_miner(self, miner):
+        self.miners.append(miner)
+        miner.queue.push(self._next_block)
+
+    def deregister_miner(self, miner):
+        item = [x for x in self.miners if x[0] is miner][0]
+        if item:
+            self.miners.remove(item[0])
+
     def register_source(self, source, priority):
         self._blockfactory.register_source(source, priority)
-
 
 
 class BlockFactory:
@@ -148,6 +185,7 @@ class UnvalidatedBlock:
             return block
         else:
             raise ValueError("Block created was invalid")
+
 
 class Block:
 
