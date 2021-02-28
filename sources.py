@@ -30,7 +30,7 @@ class LegislationSource(Source):
             return False
 
     def get_block(self):
-        if self.has_block()
+        if self.has_block():
             data = [self._queue.pop() for _ in range(self._items_per_block)]
             self._queue_size -= self._items_per_block
             return data
@@ -58,7 +58,7 @@ class VoteSource(Source):
             return False
 
     def get_block(self):
-        if self.has_block()
+        if self.has_block():
             data = [self._queue.pop() for _ in range(self._items_per_block)]
             self._queue_size -= self._items_per_block
             return data

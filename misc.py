@@ -1,5 +1,5 @@
-from multiprocessing import Queue
-
+import multiprocessing
+import multiprocessing.queues as queues
 
 class SimpleQueue:
 
@@ -23,8 +23,11 @@ class SimpleQueue:
     def is_empty(self):
         return bool(self._queue)
  
- class MPQueueWrapper(Queue):
-     
+class MPQueueWrapper(queues.Queue):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs, ctx=multiprocessing.get_context())
+
     def push(self, data, *args, **kwargs):
         self.put(data, *args, **kwargs)
 
@@ -40,13 +43,6 @@ class MLPipelineFake:
     def encode(self, comments):
         return " ".join(["ENCODED COMMENTS", comments, "ENCODED COMMENTS"])
 
-class MLQueueWrapper(Queue):
-
-    def push(self, value):
-        self.put(value)
-
-    def pop(self):
-        return self.get()
 
 class TaxToken:
 

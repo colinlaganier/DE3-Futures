@@ -4,7 +4,8 @@ from functools import reduce
 
 from vote import Vote
 from legislation import Legislation
-from misc import TaxToken, MLQueueWrapper
+from misc import TaxToken, MPQueueWrapper
+from sources import Source
 
 # TOD
 #   > Automatically updating hash on change
@@ -16,13 +17,13 @@ class Moderator:
 
     def __init__(self, time_per_block=1.21E6, blocks_per_chunk=1024):
         self.block_store = []
-        self._difficulty
+        self._difficulty = 1
         self._time_per_block = time_per_block
         self._blocks_per_chunk = blocks_per_chunk
 
     @property
     def difficulty(self):
-        return self.difficulty
+        return self._difficulty
 
     @difficulty.setter
     def difficulty(self, value):
@@ -46,17 +47,21 @@ class Moderator:
 class ProofOfWork:
 
     def __init__(self, blockchain):
-        self._blockfactory = BlockFactory()
         self.blockchain = blockchain
-        self._next_block = blockfactory.next_block()
 
         self.moderator = blockchain.moderator
-        self.register(self.moderator)
 
-        self.validation_queue = MLQueueWrapper()
+        self.validation_queue = MPQueueWrapper()
+        self.miner_manager_sq = None
+        self.miner_manager_rq = None
 
         self.subscribed = []
-        self.miners = []
+
+        self.register(self.moderator)
+
+        self._blockfactory = BlockFactory(self, 50)
+        self._next_block = self._blockfactory.next_block
+
 
     @property
     def unvalidated_block(self):
@@ -70,14 +75,35 @@ class ProofOfWork:
     def max_nonce(self):
         return self.blockchain.max_nonce
 
+    def add_miner_manager(self, send_q, receive_q):
+        self.miner_manager_sq = send_q
+        self.miner_manager_rq = receive_q
+
     def listen(self):
+
+        mm_message_functions = {"GETCOND":self.send_conditions,
+                                "GETBLOCK":self.send_block}
+
         while True:
             if not self.validation_queue.empty():
                 item = self.validation_queue.pop()
                 if item is None:
                     break
                 else:
-                    self.validate_block(*item)
+                    self.validate_block(**item)
+            if not self.miner_manager_rq.empty():
+                item = self.miner_manager_rq.pop()
+                mm_message_functions[item[0]](**item[1])
+
+    def send_conditions(self, id=None):
+        difficulty = self.moderator.difficulty
+        self.miner_manager_sq.push(("UPDATE",{"id":id,
+                                              "difficulty":difficulty,
+                                              "max_nonse":self.blockchain.max_nonce}))
+
+    def send_block(self, id=None):
+        self.miner_manager_sq.push("NEW", {"block":self._next_block,
+                                           "id":id})
     
     def validate_block(self, nonse, miner):
         block = self.get_block_from_unvalidated_block(nonse)
@@ -85,9 +111,10 @@ class ProofOfWork:
         if int(block.hash, 16) < 2**(256-self.moderator.difficulty):
             self.blockchain.add(block)
             self.notify_all(block)
-            miner.receive_token(TaxToken())
             self._next_block = self._blockfactory.next_block()
-            self.notify_all_miners()
+            self.miner_manager_sq.push(("TOKEN", {"token":TaxToken(), 
+                                                  "id":miner}))
+            self.send_new_block()
             return True
 
         return False
@@ -105,8 +132,7 @@ class ProofOfWork:
             sub.notify(block)
 
     def send_new_block(self): 
-        for miner, queue in self.miners:
-            queue.push(self._next_block)
+        self.miner_manager_sq.push(("NEW",{"block":self._next_block}))
         
     def register(self, object):
         has_notify = getattr(object, "notify", None)
@@ -119,21 +145,8 @@ class ProofOfWork:
         if object in self.subscribed:
             self.subscribed.remove(object)
 
-    def notify_all_miners(self):
-        for miner, queue in self.miners:
-            queue.push(self._next_block)
-
-    def register_miner(self, miner):
-        self.miners.append(miner)
-        miner.queue.push(self._next_block)
-
-    def deregister_miner(self, miner):
-        item = [x for x in self.miners if x[0] is miner][0]
-        if item:
-            self.miners.remove(item[0])
-
-    def register_source(self, source, priority):
-        self._blockfactory.register_source(source, priority)
+    def register_source(self, source, **kwargs):
+        self._blockfactory.register_source(source, **kwargs)
 
 
 class BlockFactory:
@@ -141,8 +154,9 @@ class BlockFactory:
     def __init__(self, proof_of_work, votes_per_block):
         self.votes_per_block = votes_per_block
         proof_of_work.register(self)
-        self._unvalidated_block = self._get_next_block()
         self._sources = []
+
+        self._unvalidated_block = self._get_next_block(proof_of_work.blockchain.tail.hash)
 
     @property
     def next_block(self):
@@ -161,12 +175,11 @@ class BlockFactory:
                     return UnvalidatedBlock(data, previous_hash)
 
     def register_source(self, source, priority=100):
-        if issubclass(source, Source):
-            self._sources.append(priority, source)
+        if isinstance(source, Source):
+            self._sources.append((priority, source))
 
     def notify(self, block):
-        if block.is_valid():
-            self._unvalidated_block = self._get_next_block(block.hash)
+        self._unvalidated_block = self._get_next_block(block.hash)
 
 
 class UnvalidatedBlock:

@@ -33,6 +33,8 @@ class BlockChainFactory:
         self.proof_of_work.register_source(commons_source)
         self.proof_of_work.register_source(vote_source)
 
+        self.proof_of_work.notify_all(None)
+
 if __name__ == "__main__":
 
     pass
