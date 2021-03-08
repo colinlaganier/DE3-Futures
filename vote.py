@@ -154,6 +154,8 @@ class Voter:
             self.vote(*self.notifications[legislation.id][1])
             del self.notifications[legislation.id]
             return
+
+            
         self.notify_all_subs(legislation, for_legislation, comments, level)
 
         try:
