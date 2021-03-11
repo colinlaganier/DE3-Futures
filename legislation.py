@@ -2,6 +2,7 @@ from misc import SimpleQueue
 
 class Legislation:
 
+    # Class variables for streams, ids and currently open legislation
     queue = SimpleQueue()
     count = 0
     open_legislation = set()

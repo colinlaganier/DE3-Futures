@@ -16,11 +16,14 @@ from sources import Source
 class Moderator:
 
     def __init__(self, time_per_block=1.21E6, blocks_per_chunk=1024):
+        """ Creates moderator object that adjusts the difficulty of 
+            the proof of work algorithm """
         self.block_store = []
         self._difficulty = 1
         self._time_per_block = time_per_block
         self._blocks_per_chunk = blocks_per_chunk
 
+    # Ensures difficulty property cant be changed by outside users
     @property
     def difficulty(self):
         return self._difficulty
@@ -30,6 +33,7 @@ class Moderator:
         raise PermissionError()
     
     def notify(self, block):
+        """ Receives notification when new block and adjusts difficulty """
         self.block_store.append(block)
 
         if len(self.block_store) == self._blocks_per_chunk:
@@ -37,7 +41,8 @@ class Moderator:
             self.block_store = []
 
     def recalculate_difficulty(self):
-        time_taken = (self.block_store[-1] - self.block_store[0]).total_seconds()
+        """ Simple adjustment of difficulty based on the time taken to mine a number of blocks"""
+        time_taken = (self.block_store[-1].time_stamp - self.block_store[0].time_stamp).total_seconds()
         if time_taken > self._time_per_block:
             self._difficulty += 1
         else:
@@ -47,6 +52,8 @@ class Moderator:
 class ProofOfWork:
 
     def __init__(self, blockchain):
+        """ Manages the addition of blocks to the blockchain using a SHA256 
+            proof of work scheme """
         self.blockchain = blockchain
 
         self.moderator = blockchain.moderator
@@ -62,7 +69,7 @@ class ProofOfWork:
         self._blockfactory = BlockFactory(self, 50)
         self._next_block = self._blockfactory.next_block
 
-
+    # Ensures the current unvalidated block is immutable
     @property
     def unvalidated_block(self):
         return self._next_block
@@ -71,16 +78,19 @@ class ProofOfWork:
     def unvalidated_block(self, value):
         raise PermissionError("Can't change value of next block")
 
+    # Ensures the maximum nonce value is immutable
     @property
     def max_nonce(self):
         return self.blockchain.max_nonce
 
+   
     def add_miner_manager(self, send_q, receive_q):
+        """ Conned the proof of work to the miner manager through threadsafe queues """
         self.miner_manager_sq = send_q
         self.miner_manager_rq = receive_q
 
     def listen(self):
-
+        """ Listens for data requests and nonse validation requests before processing them """
         mm_message_functions = {"GETCOND":self.send_conditions,
                                 "GETBLOCK":self.send_block}
 
@@ -96,16 +106,19 @@ class ProofOfWork:
                 mm_message_functions[item[0]](**item[1])
 
     def send_conditions(self, id=None):
+        """ Sends requested conditions to miner manager """
         difficulty = self.moderator.difficulty
         self.miner_manager_sq.push(("UPDATE",{"id":id,
                                               "difficulty":difficulty,
                                               "max_nonse":self.blockchain.max_nonce}))
 
     def send_block(self, id=None):
+        """ Sends requested block to miner manager """
         self.miner_manager_sq.push("NEW", {"block":self._next_block,
                                            "id":id})
     
     def validate_block(self, nonse, miner):
+        """ Checks to see if the block is valid based on the given nonce """
         block = self.get_block_from_unvalidated_block(nonse)
 
         if int(block.hash, 16) < 2**(256-self.moderator.difficulty):
@@ -120,6 +133,7 @@ class ProofOfWork:
         return False
 
     def get_block_from_unvalidated_block(self, nonse):
+        """ Utility function to make a Block from an UnvalidatedBlock """
         data = self._next_block.data
         prev_hash = self._next_block.previous_hash
         block_id = self._next_block.block_id
@@ -128,13 +142,16 @@ class ProofOfWork:
         return Block(data, prev_hash, nonse, block_id, time_stamp)
 
     def notify_all(self, block):
+        """ Notifies all subscribers that a block has been mined """
         for sub in self.subscribed:
             sub.notify(block)
 
     def send_new_block(self): 
+        """ Pushes a new block to the miner manager """
         self.miner_manager_sq.push(("NEW",{"block":self._next_block}))
         
     def register(self, object):
+        """ Registers objects for notifications """
         has_notify = getattr(object, "notify", None)
         if callable(has_notify):
             self.subscribed.append(object)
@@ -142,10 +159,12 @@ class ProofOfWork:
             raise ValueError("Invalid object")
     
     def deregister(self, object):
+        """ Deregisters for notifications """
         if object in self.subscribed:
             self.subscribed.remove(object)
 
     def register_source(self, source, **kwargs):
+        """ Adds a source for the blockfactory """
         self._blockfactory.register_source(source, **kwargs)
 
 
@@ -187,12 +206,14 @@ class UnvalidatedBlock:
     count = 0
 
     def __init__(self, data, previous_hash):
+        """ Data structure that contains information for a Block without a nonce """
         self.previous_hash = previous_hash
         self.data = data
         self.block_id = UnvalidatedBlock.count + 1
         self.time_stamp = datetime.now()
 
     def make_block(self, nonce):
+        """ Creates a Block from the contained data """
         block = Block(self.data, self.previous_hash, nonce, self.block_id, self.time_stamp)
         if block.is_valid():
             return block
@@ -203,6 +224,8 @@ class UnvalidatedBlock:
 class Block:
 
     def __init__(self, data, previous_hash, nonce, block_id, time_stamp=None, hash_function=hashlib.sha256):
+        """ Container that is used with the blockchain. Defaults to using a sha256 hash function - this should be 
+            the same as used by the proof of work validation function """
         self.previous_hash = previous_hash
         self.data = data
         self.block_id = block_id
@@ -219,6 +242,7 @@ class Block:
         self.hash = self.calculate_hash()
 
     def calculate_hash(self):
+        """ Calculates the block hash based on the concatenation of contained data """
         hasher = self.hash_function()
         prepped_data = self.prep_hash()
         hasher.update(prepped_data)
@@ -226,13 +250,16 @@ class Block:
         return hasher.hexdigest()
 
     def update_hash(self):
+        """ Recalculates the hash, used for readability """
         self.hash = self.calculate_hash()
 
     def prep_hash(self):
+        """ Utility function for concatenating data """
         hashing_data = [self.data, self.block_id, self.nonce, self.previous_hash, self.time_stamp]
         hashing_data = [str(x).encode("utf-8") for x in hashing_data]
         return reduce(lambda x, y: x+y, hashing_data)
 
+    # Ensures blocks are set correctly
     @property
     def next_block(self):
         return self._next

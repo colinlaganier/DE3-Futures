@@ -12,9 +12,10 @@ class Encrypter(abc.ABC):
 
     @abc.abstractmethod
     def __init__(self, salt):
+        """ Abstract interface required by encrypter objects in the system """
         self.salt = salt
     
-
+    # Defines required methods that Encypters need to implement
     @abc.abstractmethod
     def decrypt(self, key):
         raise NotImplementedError()
@@ -29,20 +30,25 @@ class Encrypter(abc.ABC):
 
 
 class FakeEncrypter(Encrypter):
-
+    """ A fake Encrypter that acts as an encrypter object without 
+        implementing the encryption algorithm """
     def decrypt(self, data, key):
         return str(data)
 
     def _get_cipher_text(self, data, key):
-        return "ENCRYPTED VOTE: " + str(data)
+        return "<ENCRYPTED VOTE>" + str(data) + "<ENCRYPTED VOTE>"
 
 
 class Vote:
 
+    # Output stream for vote casting
     vote_queue = SimpleQueue()
+    # Machine learning pipeline that encodes comments
     ml_pipeline = MLPipelineFake()
 
     def __init__(self, legislation, vote_for, voter, comments):
+        """ Vote object that can be cast onto the blockchain. 
+            Votes are first converted to EncryptedVotes prior too being commited """
         if isinstance(legislation, Legislation):
             self.legislation = legislation
         else:
@@ -59,14 +65,13 @@ class Vote:
             raise TypeError("Invalid Voter")
         self.comments = comments
 
+    # Sets vote casting stream
     @classmethod
     def set_output(cls, output):
         cls.queue = output
 
     def cast(self, key, encrypter=FakeEncrypter):
-        # ------------------------------------------------------------------ #
-        #   Needs some work doing. Pipe comments to ML system                #
-        # ------------------------------------------------------------------ #
+        """ Casts vote to the blockchain after processing comments and encrypting information. """
 
         encoded_comments = Vote.ml_pipeline.encode(self.comments)
         encrypter = Encrypter(randint(0, 2**32))
@@ -89,6 +94,7 @@ class Vote:
 class EncryptedVote:
 
     def __init__(self, cipher_text, plain_text):
+        """ Simple container of vote information """
         self.cipher_text = cipher_text
         self.plain_text = plain_text
 
@@ -102,6 +108,8 @@ class EncryptedVote:
 class Voter:
 
     def __init__(self, id, district, public_key):
+        """ Container for each individual voter in the system, allowing them to vote, 
+            delegate and receive votes. """
         self.id = id
         self.district = district
         self.public_key = public_key
@@ -111,12 +119,15 @@ class Voter:
         self.proxy = VoterProxy(self)
 
     def vote(self, legislation, for_legislation, comments):
+        """ Cast vote on a piece of legislation with comments """
         self.notify_all_subs(legislation, for_legislation, comments)
         vote = Vote(legislation, for_legislation, self, comments)
         vote.cast(self.public_key)
         legislation.deregister(self)
 
     def notify_all_subs(self, legislation, for_legislation, comments, level=0):
+        """ Notify all subscribers that you are voting for a particular piece of legislation.
+            Passes all required voting information """
         legislative_list = [type(legislation)]
         while legislative_list:
             legislative_type = legislative_list.pop()
@@ -130,6 +141,8 @@ class Voter:
             level += 1
     
     def subscribe(self, voter, legislation_type):
+        """ Core aspect of liquid voting system. 
+            Subscribe to a delegate on a particular legislation type """
         if not issubclass(legislation_type, Legislation):
             raise ValueError
         try:
@@ -138,18 +151,21 @@ class Voter:
             voter.register(self.proxy, legislation_type)
 
     def register(voter, legislation_type):
+        """ Registers subscribers based on what they subscribe to you for """
         try:
             self.subscribed_to_me[legislation_type.__name__].append(voter)
         except KeyError:
             self.subscribed_by_me[legislation_type.__name__] = [voter]
 
     def deregister(voter, legislation_type):
+        """ Removes subscribers """
         try:
             self.subscribed_to_me[legislation_type.__name__].remove(voter)
         except KeyError:
             return
 
     def notify(self, legislation, for_legislation, comments, level, final_call=0):
+        """ Receive notification about voting information. This could be from delegates or a final voting call """
         if final_call:
             self.vote(*self.notifications[legislation.id][1])
             del self.notifications[legislation.id]
@@ -172,6 +188,7 @@ class Voter:
 class VoterProxy:
 
     def __init__(self, voter):
+        """ Proxy object that limits calls to a Voter object """
         self._voter = voter
 
     def notify(self, *args, **kwargs):
